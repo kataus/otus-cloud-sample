@@ -1,0 +1,80 @@
+1. Создание роли, разрешающей лямбда сервису взаимодействовать от имени аккаунта.
+https://docs.aws.amazon.com/lambda/latest/dg/lambda-intro-execution-role.html
+
+описание роли:
+в файле - lambda_assume_role_policy.json
+
+CLI:
+aws iam create-role --role-name LambdaIAMRole --assume-role-policy-document file://lambda_assume_role_policy.json
+
+- запомнить arn роли: <role_arn>
+
+2. Создание права, позволяющего выполнять определенный набор действий для всех ролей, которым это право выдано
+
+описание права в файле lambda_execution_policy.json
+
+CLI:
+aws iam create-policy --policy-name LambdaRolePolicy --policy-document file://lambda_execution_policy.json
+
+запоминаем arn права: <policy_arn>
+
+3. Предоставляем созданное право созданной роли
+
+CLI:
+aws iam attach-role-policy --role-name "LambdaIAMRole" --policy-arn <policy_arn>
+
+4. Создаем очередь в сервисе уведомлений
+
+CLI:
+aws sns create-topic --name LambdaNotufyTopic --region <your-region>
+
+запоминаем arn топика: <topic_arn>
+
+5. Создаем подписку на уведомления о сообщениях созданной очереди
+
+CLI:
+aws sns subscribe --protocol "email" --topic-arn <topic_arn> --notification-endpoint <your_email> --region <your-region>
+
+идем в почту и подтверждаем желание получать уведомления
+
+6. Добавляем в исходный код реквизиты сервиса уведомления
+
+в исходном файле lambda_function.py
+изменяем код в строчке 
+TopicArn=<topic_arn>
+
+7. Делаем zip архив с файлом кода
+
+zip lambda_function.zip lambda_function.py
+
+8. Создаем лямба функцию / подключаем код
+
+CLI:
+aws lambda craete-function --memory-size 128 --function-name lambda-notify --runtime python3.7 --handler lambda_function.lambda_handler --zip-file fileb://lambda_function.zip --role <role_arn>
+
+запоминаем arn функции: <lambda_arn>
+
+10. Создаем триггер - s3
+
+CLI:
+aws s3api create-bucket --bucket lambda-trigger-bucket-csa-2021 --region <your_region>
+
+запоминаем arn бакета: <s3_arn>
+
+11. Даем право триггеру вызывать лямбду
+
+CLI:
+aws lambda add-permission --action lambda:InvokeFunction --principal s3.amazonaws.com --statement MK312 --function-name lambda-notify --source-arn <s3_arn>
+
+12. Подключаем бакет как триггер к лямбде
+
+детали триггера находятся в файле: bucket-trigger-notification.json
+в файле надо заменить <lambda_arn> на реальный
+
+CLI:
+aws s3api put-bucket-notification-configuration --bucket <s3_arn> --notification-configuration file://bucket-trigger-notification.json
+
+13. Загружаем файл проверяем срабатывание уведомления
+
+CLI:
+aws s3 cp <path_to_local_file> s3://lambda-trigger-bucket-csa-2021
